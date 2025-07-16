@@ -2,39 +2,29 @@ name: Sync FWD Files
 
 on:
   schedule:
-    # 每天定时执行一次 (UTC时间0点，大概是北京时间早上8点)
-    - cron: '0 0 * * *'
-  # 允许你手动在 Actions 页面点击按钮触发
-  workflow_dispatch:
+    - cron: '0 0 * * *'  # 每天 UTC 0 点执行（北京时间早上 8 点）
+  workflow_dispatch:      # 支持手动触发
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      # 1. 检出你的仓库
-      - name: Checkout your repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT_FOR_ACTIONS }}
 
-      # 2. 创建目录
       - name: Create directory for downloaded files
         run: mkdir -p ./fwd_sources
 
-      # 3. 下载文件
       - name: Download the source files
         run: |
           curl -L --fail -o ./fwd_sources/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
           curl -L --fail -o ./fwd_sources/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
           curl -L --fail -o ./fwd_sources/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
 
-      # 4. 【按你的要求】合并所有“标准格式”文件
-      - name: Merge all "Standard Format" FWD files
-        id: merge
+      - name: Prepare base template
         run: |
-          OUTPUT_FILE="Ethan_widgets.fwd"
-
-          # 步骤一：创建你的自定义模板
           cat <<'EOF' > base_template.json
           {
             "title": "Ethan's Widgets",
@@ -44,24 +34,57 @@ jobs:
           }
           EOF
 
-          # 步骤二：从所有 .fwd 文件中提取 .widgets 数组，合并，然后根据 id 去重
-          # 这个命令假设所有输入文件都有一个 .widgets 数组
+      - name: Merge all .fwd widgets & generate output
+        id: merge
+        run: |
+          OUTPUT_FILE="Ethan_widgets.fwd"
+
+          # 合并所有 widgets，去重
           jq -s 'map(.widgets) | flatten | unique_by(.id)' ./fwd_sources/*.fwd > final_widgets.json
-          
-          # 步骤三：将最终的 widgets 数组注入到模板中
+
+          # 注入模板中
           jq --argfile widgets final_widgets.json '.widgets = $widgets' base_template.json > "$OUTPUT_FILE"
 
-          echo "JSON merge complete. Output file is $OUTPUT_FILE."
-          
-      # 5. 提交并推送变更
-      - name: Commit and push if changed
+          # 备份旧版本（如果存在）
+          if [ -f "$OUTPUT_FILE" ]; then
+            mkdir -p fwd_history
+            timestamp=$(date +%Y%m%d_%H%M%S)
+            cp "$OUTPUT_FILE" "fwd_history/Ethan_widgets_$timestamp.fwd"
+          fi
+
+          echo "timestamp=$(date +%Y%m%d_%H%M%S)" >> $GITHUB_ENV
+
+      - name: Compare new widgets and generate changelog
+        run: |
+          touch old_widgets.json
+          jq '.widgets | sort_by(.id)' Ethan_widgets.fwd 2>/dev/null || echo '[]' > old_widgets.json
+          jq '.widgets | sort_by(.id)' final_widgets.json > new_widgets.json
+
+          # 提取新增的 widget id
+          jq -n --slurpfile old old_widgets.json --slurpfile new new_widgets.json \
+            '$new - $old | map(.id)' > added_ids.json
+
+          echo "📝 新增 Widgets ID:" > CHANGELOG.md
+          jq -r '.[]' added_ids.json >> CHANGELOG.md
+
+          cat CHANGELOG.md
+
+      - name: Commit and push changes
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add Ethan_widgets.fwd CHANGELOG.md fwd_history/
           if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "chore: auto-sync and merge FWD files"
+          git commit -m "chore: auto-sync FWD files @ ${{ env.timestamp }}"
           git push
+
+      #（可选）推送所有历史文件到 history 分支
+      # - name: Push to history branch
+      #   run: |
+      #     git checkout -b history
+      #     git add fwd_history/
+      #     git commit -m "chore: backup @ ${{ env.timestamp }}"
+      #     git push origin history --force
