@@ -1,0 +1,42 @@
+name: Sync FWD Files
+
+on:
+  schedule:
+    # 每天定时执行一次 (UTC时间0点，大概是北京时间早上8点)
+    - cron: '0 0 * * *'
+  # 允许你手动在 Actions 页面点击按钮触发
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 先把你的仓库代码拉下来
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_FOR_ACTIONS }}
+
+      # 2. 创建存放 .fwd 文件的目录
+      - name: Create directory for widgets
+        run: mkdir -p ./forward_widgets
+
+      # 3. 下载那三个文件，直接覆盖旧文件
+      - name: Download FWD files
+        run: |
+          curl -L -o ./forward_widgets/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
+          curl -L -o ./forward_widgets/emryschoo.fwd 'https://raw.githubusercontent.com/EmrysChoo/ForwardWidgets/main/person_Widgets.fwd'
+          curl -L -o ./forward_widgets/pack1r.fwd 'https://raw.githubusercontent.com/pack1r/ForwardWidgets/main/pack1r.fwd'
+
+      # 4. 提交并推送变更 (如果有的话)
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: auto-sync FWD files"
+          git push
