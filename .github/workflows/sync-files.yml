@@ -25,24 +25,35 @@ jobs:
       # 3. 下载文件 (不变)
       - name: Download FWD files
         run: |
-          # 确保这里的链接是你找到的最新、正确的链接
           curl -L -o ./forward_widgets/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
           curl -L -o ./forward_widgets/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
           curl -L -o ./forward_widgets/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
 
-      # 4. 使用自定义模板和 jq 进行智能合并
+      # 4. 【新增步骤】验证所有下载文件的JSON语法
+      - name: Validate JSON syntax of each FWD file
+        run: |
+          echo "--- Validating downloaded files ---"
+          for file in ./forward_widgets/*.fwd; do
+            echo "Validating $file..."
+            # 尝试用 jq 解析文件，如果失败就报错并打印文件内容
+            if jq -e . "$file" > /dev/null; then
+              echo "$file syntax is OK."
+            else
+              echo "!!! ERROR: Invalid JSON in $file !!!"
+              echo "--- File Content Start ---"
+              cat "$file"
+              echo "--- File Content End ---"
+              exit 1 # 立刻退出，让整个 Action 失败
+            fi
+          done
+          echo "--- All files are valid JSON ---"
+
+      # 5. 使用自定义模板和 jq 进行智能合并 (原第4步)
       - name: Merge FWD files with custom template
         id: merge
         run: |
-          # 【已修改】输出文件名改为 Ethan_widgets.fwd
           OUTPUT_FILE="Ethan_widgets.fwd"
           
-          # 检查 jq 是否安装
-          if ! command -v jq &> /dev/null; then
-              sudo apt-get update && sudo apt-get install -y jq
-          fi
-
-          # 步骤一：现场创建一个临时的基础模板文件
           cat <<'EOF' > base_template.json
           {
             "title": "Ethan's Widgets",
@@ -52,15 +63,13 @@ jobs:
           }
           EOF
           
-          # 步骤二：从所有下载的 .fwd 文件中提取 widgets，合并并去重
           jq -s 'map(.widgets) | add | unique' ./forward_widgets/*.fwd > widgets_only.json
 
-          # 步骤三：将合并好的 widgets 数组注入到我们创建的基础模板中
           jq --argfile widgets widgets_only.json '.widgets = $widgets' base_template.json > "$OUTPUT_FILE"
 
           echo "JSON merge complete. Output file is $OUTPUT_FILE."
           
-      # 5. 提交并推送变更 (不变)
+      # 6. 提交并推送变更 (原第5步)
       - name: Commit and push if changed
         run: |
           git config --global user.name 'github-actions[bot]'
