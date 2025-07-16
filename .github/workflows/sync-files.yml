@@ -11,39 +11,30 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout repo
-      - name: Checkout repo
+      # 1. 检出你的仓库
+      - name: Checkout your repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT_FOR_ACTIONS }}
 
       # 2. 创建目录
-      - name: Create directory for widgets
-        run: mkdir -p ./forward_widgets
+      - name: Create directory for downloaded files
+        run: mkdir -p ./fwd_sources
 
       # 3. 下载文件
-      - name: Download FWD files
+      - name: Download the source files
         run: |
-          curl -L -o ./forward_widgets/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
-          curl -L -o ./forward_widgets/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
-          curl -L -o ./forward_widgets/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
+          curl -L --fail -o ./fwd_sources/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
+          curl -L --fail -o ./fwd_sources/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
+          curl -L --fail -o ./fwd_sources/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
 
-      # 4. 【最终版】根据真实文件格式进行合并
-      - name: Merge all FWD files based on actual formats
+      # 4. 【按你的要求】合并所有“标准格式”文件
+      - name: Merge all "Standard Format" FWD files
         id: merge
         run: |
           OUTPUT_FILE="Ethan_widgets.fwd"
 
-          # 步骤一：处理“标准格式”的JSON文件 (pack1r, emryschoo)，提取它们的 .widgets 数组
-          jq -s 'map(.widgets) | flatten' ./forward_widgets/pack1r.fwd ./forward_widgets/emryschoo.fwd > normal_widgets.json
-
-          # 步骤二：处理“流式格式”的JSON文件 (huangxd)，把它里面所有的独立对象都读成一个数组
-          jq -s . ./forward_widgets/huangxd.fwd > special_widgets.json
-
-          # 步骤三：把上面两步生成的结果（两个数组）合并成一个最终的 widgets 数组，并根据 id 去重
-          jq -s 'flatten | unique_by(.id)' normal_widgets.json special_widgets.json > final_widgets.json
-          
-          # 步骤四：创建你的自定义模板
+          # 步骤一：创建你的自定义模板
           cat <<'EOF' > base_template.json
           {
             "title": "Ethan's Widgets",
@@ -53,7 +44,11 @@ jobs:
           }
           EOF
 
-          # 步骤五：将最终的 widgets 数组注入到模板中，生成最终文件
+          # 步骤二：从所有 .fwd 文件中提取 .widgets 数组，合并，然后根据 id 去重
+          # 这个命令假设所有输入文件都有一个 .widgets 数组
+          jq -s 'map(.widgets) | flatten | unique_by(.id)' ./fwd_sources/*.fwd > final_widgets.json
+          
+          # 步骤三：将最终的 widgets 数组注入到模板中
           jq --argfile widgets final_widgets.json '.widgets = $widgets' base_template.json > "$OUTPUT_FILE"
 
           echo "JSON merge complete. Output file is $OUTPUT_FILE."
