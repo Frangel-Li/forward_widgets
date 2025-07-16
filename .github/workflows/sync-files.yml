@@ -23,6 +23,7 @@ jobs:
           curl -L --fail -o ./fwd_sources/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
           curl -L --fail -o ./fwd_sources/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
           curl -L --fail -o ./fwd_sources/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
+          curl -L --fail -o ./fwd_sources/emryschoo.fwd 'https://raw.githubusercontent.com/pack1r/ForwardWidgets/refs/heads/main/pack1r-18.fwd'
 
       - name: Extract widgets from possibly invalid JSON
         run: |
