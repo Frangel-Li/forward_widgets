@@ -7,28 +7,60 @@ on:
   # 允许你手动在 Actions 页面点击按钮触发
   workflow_dispatch:
 
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      # 1. 先把你的仓库代码拉下来
+      # 1. Checkout repo (不变)
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT_FOR_ACTIONS }}
 
-      # 2. 创建存放 .fwd 文件的目录
+      # 2. 创建目录 (不变)
       - name: Create directory for widgets
         run: mkdir -p ./forward_widgets
 
-      # 3. 下载那三个文件，直接覆盖旧文件
+      # 3. 下载文件 (不变)
       - name: Download FWD files
         run: |
+          # 确保这里的链接是你找到的最新、正确的链接
+          curl -L -o ./forward_widgets/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
           curl -L -o ./forward_widgets/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
-          curl -L -o ./forward_widgets/emryschoo.fwd 'https://raw.githubusercontent.com/EmrysChoo/ForwardWidgets/main/person_Widgets.fwd'
-          curl -L -o ./forward_widgets/pack1r.fwd 'https://raw.githubusercontent.com/pack1r/ForwardWidgets/main/pack1r.fwd'
+          curl -L -o ./forward_widgets/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
 
-      # 4. 提交并推送变更 (如果有的话)
+      # 4. 使用自定义模板和 jq 进行智能合并
+      - name: Merge FWD files with custom template
+        id: merge
+        run: |
+          # 【已修改】输出文件名改为 Ethan_widgets.fwd
+          OUTPUT_FILE="Ethan_widgets.fwd"
+          
+          # 检查 jq 是否安装
+          if ! command -v jq &> /dev/null; then
+              sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          # 步骤一：现场创建一个临时的基础模板文件
+          cat <<'EOF' > base_template.json
+          {
+            "title": "Ethan's Widgets",
+            "description": "A collection of widgets created by Ethan",
+            "icon": "https://github.com/pack1r/ForwardWidgets/raw/main/icon.png",
+            "widgets": []
+          }
+          EOF
+          
+          # 步骤二：从所有下载的 .fwd 文件中提取 widgets，合并并去重
+          jq -s 'map(.widgets) | add | unique' ./forward_widgets/*.fwd > widgets_only.json
+
+          # 步骤三：将合并好的 widgets 数组注入到我们创建的基础模板中
+          jq --argfile widgets widgets_only.json '.widgets = $widgets' base_template.json > "$OUTPUT_FILE"
+
+          echo "JSON merge complete. Output file is $OUTPUT_FILE."
+          
+      # 5. 提交并推送变更 (不变)
       - name: Commit and push if changed
         run: |
           git config --global user.name 'github-actions[bot]'
@@ -38,5 +70,5 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "chore: auto-sync FWD files"
+          git commit -m "chore: auto-sync and merge FWD files"
           git push
