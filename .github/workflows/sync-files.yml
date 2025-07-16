@@ -28,31 +28,22 @@ jobs:
           curl -L -o ./forward_widgets/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
           curl -L -o ./forward_widgets/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
 
-      # 4. 分别处理并合并所有文件（带调试输出）
-      - name: Merge all FWD files with custom logic
+      # 4. 【终极调试】打印所有下载文件的原始内容
+      - name: Debug - Show Raw Downloaded Content
+        run: |
+          echo "--- Verifying content of downloaded files ---"
+          for file in ./forward_widgets/*.fwd; do
+            echo "--- Content of $file ---"
+            cat "$file"
+            echo -e "\n--- End of $file ---\n"
+          done
+
+      # 5. 合并文件 (使用我们确认最正确的逻辑)
+      - name: Merge all FWD files
         id: merge
         run: |
           OUTPUT_FILE="Ethan_widgets.fwd"
-          
-          # 步骤一
-          jq -s 'map(.widgets) | add' ./forward_widgets/pack1r.fwd ./forward_widgets/emryschoo.fwd > normal_widgets.json
 
-          # 步骤二
-          jq -s . ./forward_widgets/huangxd.fwd > special_widgets.json
-
-          # 步骤三
-          jq -s 'add | unique' normal_widgets.json special_widgets.json > final_widgets.json
-          
-          # 【关键调试步骤】打印所有中间文件的内容
-          echo "--- Content of normal_widgets.json ---"
-          cat normal_widgets.json
-          echo -e "\n--- Content of special_widgets.json ---"
-          cat special_widgets.json
-          echo -e "\n--- Content of final_widgets.json ---"
-          cat final_widgets.json
-          echo -e "\n--- Debug output end ---"
-
-          # 步骤四
           cat <<'EOF' > base_template.json
           {
             "title": "Ethan's Widgets",
@@ -62,21 +53,21 @@ jobs:
           }
           EOF
 
-          # 步骤五
+          jq -s 'flatten | map(select(.id != null)) | unique_by(.id)' ./forward_widgets/*.fwd > final_widgets.json
+          
           jq --argfile widgets final_widgets.json '.widgets = $widgets' base_template.json > "$OUTPUT_FILE"
 
           echo "JSON merge complete. Output file is $OUTPUT_FILE."
           
-      # 5. 提交并推送变更
+      # 6. 提交并推送变更
       - name: Commit and push if changed
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add -A
-          if git diff --staged --quiet;
-            then
-              echo "No changes to commit."
-              exit 0
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+            exit 0
           fi
           git commit -m "chore: auto-sync and merge FWD files"
           git push
