@@ -8,83 +8,78 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.PAT_FOR_ACTIONS }}
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.PAT_FOR_ACTIONS }}
 
-      - name: Create directory for downloaded files
-        run: mkdir -p ./fwd_sources
+    - name: Create source directory
+      run: mkdir -p ./fwd_sources
 
-      - name: Download the source files
-        run: |
-          curl -L --fail -o ./fwd_sources/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
-          curl -L --fail -o ./fwd_sources/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
-          curl -L --fail -o ./fwd_sources/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
+    - name: Download FWD files
+      run: |
+        curl -L --fail -o ./fwd_sources/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
+        curl -L --fail -o ./fwd_sources/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
+        curl -L --fail -o ./fwd_sources/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
 
-      - name: Prepare base template
-        run: |
-          cat <<'EOF' > base_template.json
-          {
-            "title": "Ethan's Widgets",
-            "description": "A collection of widgets created by Ethan",
-            "icon": "https://github.com/pack1r/ForwardWidgets/raw/main/icon.png",
-            "widgets": []
-          }
-          EOF
+    - name: Extract widgets from possibly invalid JSON
+      run: |
+        echo "[" > combined_widgets.json
 
-      - name: Merge all .fwd widgets & generate output
-        id: merge
-        run: |
-          OUTPUT_FILE="Ethan_widgets.fwd"
+        first=1
+        for file in ./fwd_sources/*.fwd; do
+          echo "🔍 正在处理 $file"
 
-          # 合并所有 widgets，去重
-          jq -s 'map(.widgets) | flatten | unique_by(.id)' ./fwd_sources/*.fwd > final_widgets.json
+          # 提取 widgets 数组体（忽略头尾）
+          widgets=$(sed -n '/"widgets"[[:space:]]*:/,/]/p' "$file" | sed '1d;$d')
 
-          # 注入模板中
-          jq --argfile widgets final_widgets.json '.widgets = $widgets' base_template.json > "$OUTPUT_FILE"
-
-          # 备份旧版本（如果存在）
-          if [ -f "$OUTPUT_FILE" ]; then
-            mkdir -p fwd_history
-            timestamp=$(date +%Y%m%d_%H%M%S)
-            cp "$OUTPUT_FILE" "fwd_history/Ethan_widgets_$timestamp.fwd"
+          if [ -n "$widgets" ]; then
+            if [ $first -eq 0 ]; then
+              echo "," >> combined_widgets.json
+            fi
+            echo "$widgets" >> combined_widgets.json
+            first=0
+          else
+            echo "⚠️ 跳过无效或无 widgets 的文件：$file"
           fi
+        done
 
-          echo "timestamp=$(date +%Y%m%d_%H%M%S)" >> $GITHUB_ENV
+        echo "]" >> combined_widgets.json
 
-      - name: Compare new widgets and generate changelog
-        run: |
-          touch old_widgets.json
-          jq '.widgets | sort_by(.id)' Ethan_widgets.fwd 2>/dev/null || echo '[]' > old_widgets.json
-          jq '.widgets | sort_by(.id)' final_widgets.json > new_widgets.json
+        # 去重（按 id）
+        jq 'unique_by(.id)' combined_widgets.json > final_widgets.json
 
-          # 提取新增的 widget id
-          jq -n --slurpfile old old_widgets.json --slurpfile new new_widgets.json \
-            '$new - $old | map(.id)' > added_ids.json
+    - name: Build final Ethan_widgets.fwd
+      run: |
+        cat <<EOF > Ethan_widgets.fwd
+{
+  "title": "Ethan's Widgets",
+  "description": "A collection of widgets created by Ethan",
+  "icon": "https://github.com/pack1r/ForwardWidgets/raw/main/icon.png",
+  "widgets":
+EOF
 
-          echo "📝 新增 Widgets ID:" > CHANGELOG.md
-          jq -r '.[]' added_ids.json >> CHANGELOG.md
+        cat final_widgets.json >> Ethan_widgets.fwd
+        echo "}" >> Ethan_widgets.fwd
 
-          cat CHANGELOG.md
+    # ✅（可选）备份历史版本
+    - name: Backup old version (optional)
+      run: |
+        mkdir -p fwd_history
+        timestamp=$(date +%Y%m%d_%H%M%S)
+        cp Ethan_widgets.fwd "fwd_history/Ethan_widgets_$timestamp.fwd"
+        echo "timestamp=$timestamp" >> $GITHUB_ENV
 
-      - name: Commit and push changes
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add Ethan_widgets.fwd CHANGELOG.md fwd_history/
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-          git commit -m "chore: auto-sync FWD files @ ${{ env.timestamp }}"
-          git push
-
-      #（可选）推送所有历史文件到 history 分支
-      # - name: Push to history branch
-      #   run: |
-      #     git checkout -b history
-      #     git add fwd_history/
-      #     git commit -m "chore: backup @ ${{ env.timestamp }}"
-      #     git push origin history --force
+    - name: Commit and push changes
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git add Ethan_widgets.fwd fwd_history/
+        if git diff --staged --quiet; then
+          echo "✅ No changes to commit."
+          exit 0
+        fi
+        git commit -m "chore: auto-merge widgets @ ${{ env.timestamp }}"
+        git push
