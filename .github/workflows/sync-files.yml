@@ -32,7 +32,11 @@ jobs:
           for file in ./fwd_sources/*.fwd; do
             echo "🔍 正在处理 $file"
 
+            # 提取 widgets 数组主体，忽略 widgets: 开头和结尾 ]
             widgets=$(sed -n '/"widgets"[[:space:]]*:/,/]/p' "$file" | sed '1d;$d')
+
+            # 删除 widgets 块中最后一个对象后多余的逗号
+            widgets=$(echo "$widgets" | sed ':a;N;$!ba;s/},[[:space:]]*$/}/')
 
             if [ -n "$widgets" ]; then
               if [ $first -eq 0 ]; then
@@ -52,13 +56,15 @@ jobs:
 
       - name: Build final Ethan_widgets.fwd
         run: |
-          echo '{' > Ethan_widgets.fwd
-          echo '  "title": "Ethan'\''s Widgets",' >> Ethan_widgets.fwd
-          echo '  "description": "A collection of widgets created by Ethan",' >> Ethan_widgets.fwd
-          echo '  "icon": "https://github.com/pack1r/ForwardWidgets/raw/main/icon.png",' >> Ethan_widgets.fwd
-          echo '  "widgets":' >> Ethan_widgets.fwd
-          cat final_widgets.json >> Ethan_widgets.fwd
-          echo '}' >> Ethan_widgets.fwd
+          {
+            echo '{'
+            echo '  "title": "Ethan'\''s Widgets",'
+            echo '  "description": "A collection of widgets created by Ethan",'
+            echo '  "icon": "https://github.com/pack1r/ForwardWidgets/raw/main/icon.png",'
+            echo '  "widgets":'
+            cat final_widgets.json
+            echo '}'
+          } > Ethan_widgets.fwd
 
       - name: Backup old version
         run: |
