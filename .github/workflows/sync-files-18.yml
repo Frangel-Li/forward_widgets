@@ -10,17 +10,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-<<<<<<< HEAD
+
       # 1. Checkout repo (不变)
       - name: Checkout repo
-=======
+
       - name: Checkout repository
->>>>>>> bfa56cf8399e184018722d448f1cae5b2edb92f9
+
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT_FOR_ACTIONS }}
 
-<<<<<<< HEAD
+
       # 2. 创建目录 (不变)
       - name: Create directory for widgets
         run: mkdir -p ./forward_widgets
@@ -63,7 +63,7 @@ jobs:
           
       # 5. 提交并推送变更 (不变)
       - name: Commit and push if changed
-=======
+
       - name: Create source directory
         run: mkdir -p ./fwd_sources
 
@@ -121,7 +121,7 @@ jobs:
           echo "timestamp=$timestamp" >> $GITHUB_ENV
 
       - name: Commit and push changes
->>>>>>> bfa56cf8399e184018722d448f1cae5b2edb92f9
+
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
@@ -130,10 +130,10 @@ jobs:
             echo "✅ No changes to commit."
             exit 0
           fi
-<<<<<<< HEAD
+
           git commit -m "chore: auto-sync and merge FWD files"
           git push
-=======
+
           git commit -m "chore: auto-merge widgets @ ${{ env.timestamp }}"
           git push
->>>>>>> bfa56cf8399e184018722d448f1cae5b2edb92f9
+
