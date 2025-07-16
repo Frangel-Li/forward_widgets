@@ -52,7 +52,7 @@ jobs:
           echo "]" >> combined_widgets.json
 
           # 去重（按 id）
-          jq 'unique_by(.id)' combined_widgets.json > final_widgets.json
+          jq 'unique_by(.title)' combined_widgets.json > final_widgets.json
 
       - name: Build final Ethan_widgets.fwd
         run: |
