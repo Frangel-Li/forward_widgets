@@ -26,34 +26,25 @@ jobs:
       - name: Download FWD files
         run: |
           curl -L -o ./forward_widgets/pack1r.fwd 'https://github.com/pack1r/ForwardWidgets/raw/main/pack1r.fwd'
-          curl -L -o ./forward_widgets/huangxd.fwd 'https://raw.githubusercontent.com/huangxd-/ForwardWidgets/main/widgets.fwd'
+          curl -L -o ./forward_widgets/huangxd.fwd 'https://github.com/huangxd-/ForwardWidgets/main/widgets.fwd'
           curl -L -o ./forward_widgets/emryschoo.fwd 'https://github.com/EmrysChoo/ForwardWidgets/raw/main/person_Widgets.fwd'
 
-      # 4. 【新增步骤】验证所有下载文件的JSON语法
-      - name: Validate JSON syntax of each FWD file
-        run: |
-          echo "--- Validating downloaded files ---"
-          for file in ./forward_widgets/*.fwd; do
-            echo "Validating $file..."
-            # 尝试用 jq 解析文件，如果失败就报错并打印文件内容
-            if jq -e . "$file" > /dev/null; then
-              echo "$file syntax is OK."
-            else
-              echo "!!! ERROR: Invalid JSON in $file !!!"
-              echo "--- File Content Start ---"
-              cat "$file"
-              echo "--- File Content End ---"
-              exit 1 # 立刻退出，让整个 Action 失败
-            fi
-          done
-          echo "--- All files are valid JSON ---"
-
-      # 5. 使用自定义模板和 jq 进行智能合并 (原第4步)
-      - name: Merge FWD files with custom template
+      # 4. 【最终版】分别处理并合并所有文件
+      - name: Merge all FWD files with custom logic
         id: merge
         run: |
           OUTPUT_FILE="Ethan_widgets.fwd"
           
+          # 步骤一：处理“正常”的JSON文件，提取它们的 .widgets 数组
+          jq -s 'map(.widgets) | add' ./forward_widgets/pack1r.fwd ./forward_widgets/emryschoo.fwd > normal_widgets.json
+
+          # 步骤二：处理“特殊”的流式JSON文件，把它里面所有的独立对象都读成一个数组
+          jq -s . ./forward_widgets/huangxd.fwd > special_widgets.json
+
+          # 步骤三：把上面两步生成的结果（两个数组）合并成一个最终的 widgets 数组，并去重
+          jq -s 'add | unique' normal_widgets.json special_widgets.json > final_widgets.json
+          
+          # 步骤四：创建你的自定义模板
           cat <<'EOF' > base_template.json
           {
             "title": "Ethan's Widgets",
@@ -62,14 +53,13 @@ jobs:
             "widgets": []
           }
           EOF
-          
-          jq -s 'map(.widgets) | add | unique' ./forward_widgets/*.fwd > widgets_only.json
 
-          jq --argfile widgets widgets_only.json '.widgets = $widgets' base_template.json > "$OUTPUT_FILE"
+          # 步骤五：将最终的 widgets 数组注入到模板中，生成最终文件
+          jq --argfile widgets final_widgets.json '.widgets = $widgets' base_template.json > "$OUTPUT_FILE"
 
           echo "JSON merge complete. Output file is $OUTPUT_FILE."
           
-      # 6. 提交并推送变更 (原第5步)
+      # 5. 提交并推送变更 (不变)
       - name: Commit and push if changed
         run: |
           git config --global user.name 'github-actions[bot]'
