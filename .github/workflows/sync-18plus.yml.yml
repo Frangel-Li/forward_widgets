@@ -1,0 +1,62 @@
+name: Sync FWD 18+
+
+on:
+  schedule:
+    - cron: '30 0 * * *' # 每天 UTC 0点30分执行，和上一个错开
+  workflow_dispatch:     # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_FOR_ACTIONS }}
+
+      - name: Create source directory
+        run: mkdir -p ./fwd_sources_18plus
+
+      - name: Download 18+ FWD file
+        run: |
+          curl -L --fail -o ./fwd_sources_18plus/pack1r-18.fwd 'https://raw.githubusercontent.com/pack1r/ForwardWidgets/refs/heads/main/pack1r-18.fwd'
+
+      - name: Extract and Combine 18+ Widgets
+        id: combine_18plus
+        run: |
+          echo "[" > combined_widgets_18.json
+          # যেহেতু এখানে শুধুমাত্র একটি ফাইল আছে, আমরা সরাসরি প্রক্রিয়া করতে পারি
+          file="./fwd_sources_18plus/pack1r-18.fwd"
+          echo "🔍 Processing $file"
+          widgets=$(sed -n '/"widgets"[[:space:]]*:/,/]/p' "$file" | sed '1d;$d' | sed ':a;N;$!ba;s/},[[:space:]]*$/}/')
+          if [ -n "$widgets" ]; then
+            echo "$widgets" >> combined_widgets_18.json
+          else
+            echo "⚠️ Skipping file with no valid widgets: $file"
+          fi
+          echo "]" >> combined_widgets_18.json
+          jq 'unique_by(.title)' combined_widgets_18.json > final_widgets_18.json
+
+      - name: Build Final 18+ Widget File
+        run: |
+          {
+            echo '{'
+            echo '  "title": "Ethan'\''s Widgets 18+",'
+            echo '  "description": "A collection of widgets created by Ethan (18+)",'
+            echo '  "icon": "https://github.com/pack1r/ForwardWidgets/raw/main/icon.png",'
+            echo '  "widgets":'
+            cat final_widgets_18.json
+            echo '}'
+          } > Ethan_widgets_18.fwd
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add Ethan_widgets_18.fwd
+          if git diff --staged --quiet; then
+            echo "✅ No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(18+): auto-merge widgets"
+          git push
